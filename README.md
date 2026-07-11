@@ -1,5 +1,7 @@
 # pepys-mcp
 
+> Transcription for AI agents, by **[Pepys](https://pepys.co)** – pay-once audio & video transcription at **[pepys.co](https://pepys.co)**.
+
 The **Pepys transcription MCP server** – give any MCP-speaking agent (Claude, ChatGPT, Cursor, Gemini, open-source agents) accurate, speaker-labeled, timestamped transcription of hours-long audio and video: diarization, correctly-timed SRT/VTT captions, paste-a-link ingestion (YouTube, podcasts, Drive/Dropbox), batch, and word-level export – work a general model can't do on a raw file. **Pepys never trains on your audio.**
 
 Thin stdio wrapper over the Pepys [v1 REST API](https://pepys.co/developers). Phase-1 (BYO-key). OAuth/remote is on the roadmap.
@@ -57,6 +59,10 @@ npm run smoke      # PEPYS_API_KEY=pk_live_… npm run smoke  – hits the live 
 ## Publish
 
 `npm run build && npm publish` (publishes `pepys-mcp`). Registry listings (MCP registry, mcp.so, Smithery, PulseMCP, Glama, `awesome-mcp-servers`) are submitted separately.
+
+## About
+
+Built by **[Pepys](https://pepys.co)** – pay-once, usage-based transcription for audio and video (no subscription, credits never expire). Learn more at **[pepys.co](https://pepys.co)** · [MCP server](https://pepys.co/mcp) · [Developer docs](https://pepys.co/developers) · [Pricing](https://pepys.co/pricing).
 
 ## License
 
