@@ -1,0 +1,50 @@
+{
+  "name": "pepys-mcp",
+  "version": "0.1.1",
+  "mcpName": "co.pepys/pepys-mcp",
+  "description": "Pepys transcription MCP server (stdio) – transcribe hours-long audio/video, diarization, timed SRT/VTT, paste-a-link (YouTube/podcast), batch, word-level export. Never trains on your audio.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://pepys.co/developers",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "transcription",
+    "speech-to-text",
+    "diarization",
+    "subtitles",
+    "podcast",
+    "pepys"
+  ],
+  "bin": {
+    "pepys-mcp": "dist/index.js"
+  },
+  "exports": {
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "default": "./dist/core.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc && chmod +x dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "smoke": "node scripts/smoke-test.mjs",
+    "prepublishOnly": "npm run build",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "@types/node": "^22.10.0"
+  }
+}

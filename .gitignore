@@ -1,0 +1,8 @@
+node_modules
+dist
+*.log
+.DS_Store
+# Secrets/keys – also covered by the root .gitignore, kept here so the rule
+# travels with mcp/ if it's ever extracted into its own repo.
+*.pem
+*.key
