@@ -4,7 +4,6 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   ok,
-  okText,
   toToolError,
   type Io,
   type Segment,
@@ -31,6 +30,23 @@ const MIME: Record<string, string> = {
   ".mkv": "video/x-matroska", ".avi": "video/x-msvideo",
 };
 
+const segmentOutput = z.object({
+  start: z.number(),
+  end: z.number(),
+  speaker: z.string().nullable(),
+  text: z.string(),
+});
+
+const looseRecord = z.record(z.string(), z.unknown());
+
+const evidenceCitationOutput = z.object({
+  segmentId: z.string(),
+  startMs: z.number().int().nonnegative(),
+  endMs: z.number().int().nonnegative(),
+  excerpt: z.string(),
+  speaker: z.string().nullable(),
+});
+
 /** Poll a job to a terminal state, up to waitMs (hard-capped at 25s to stay under host timeouts). */
 async function pollUntilDone(io: Io, id: string, waitMs: number): Promise<Transcription> {
   const budget = Math.min(Math.max(0, waitMs), 25_000);
@@ -50,21 +66,29 @@ export function registerTools(server: McpServer, io: Io): void {
     {
       title: "Transcribe audio/video",
       description:
-        "Transcribe hours-long audio or video into an accurate, speaker-labeled (diarized), timestamped transcript with correctly-timed SRT/VTT captions – work a general model can't do on a raw file. Accepts a file_ref from upload_file or a url (YouTube, podcast episode, RSS feed, Google Drive/Dropbox share). Audio is never used to train models. Returns { job_id, status }; fetch the result with get_transcription.",
+        "Transcribe audio or video into a speaker-labeled (diarized), timestamped transcript with SRT/VTT caption timing. Accepts a file_ref from upload_file or a url (YouTube, podcast episode, RSS feed, Google Drive/Dropbox share). Audio is never used to train models. Returns { job_id, status }; fetch the result with get_transcription.",
       inputSchema: {
         url: z.url().optional().describe("Public media URL: a file, YouTube video, podcast RSS feed or episode, or a Drive/Dropbox share. Provide EITHER url OR file_ref."),
         file_ref: z.string().optional().describe("A file_ref from upload_file, for local media. Provide EITHER url OR file_ref."),
         language: z.string().optional().describe("BCP-47 hint, e.g. 'en'. Omit to auto-detect."),
-        diarize: z.boolean().default(false).describe("Label who said what. Paid capability; a non-entitled account gets an upgrade message."),
+        diarize: z.boolean().default(false).describe("Label who said what. Requires an account entitlement; a non-entitled account gets a clear unavailable-feature result."),
         summary: z.boolean().default(false).describe("Also generate an AI summary."),
         chapters: z.boolean().default(false).describe("Also generate chapters."),
         translate_to: z.string().optional().describe("BCP-47 target to translate the transcript into."),
-        quality: z.enum(["fast", "accurate"]).default("accurate"),
+        quality: z
+          .enum(["fast", "accurate"])
+          .optional()
+          .describe("Optional transcription mode. Omit unless the server advertises support."),
         episode_guid: z.string().optional().describe("Pick one podcast-feed episode by guid. Only with a feed url; mutually exclusive with episode_index."),
         episode_index: z.number().int().nonnegative().optional().describe("Pick one podcast-feed episode by position (0 = newest). Mutually exclusive with episode_guid."),
         idempotency_key: z.string().optional().describe("Make retries safe; the same key returns the same job."),
       },
-      annotations: { readOnlyHint: false, openWorldHint: true, idempotentHint: true, destructiveHint: false },
+      outputSchema: {
+        job_id: z.string(),
+        status: z.string(),
+        cached: z.boolean(),
+      },
+      annotations: { title: "Transcribe audio/video", readOnlyHint: false, openWorldHint: true, idempotentHint: true, destructiveHint: false },
     },
     async (a) => {
       if (!!a.url === !!a.file_ref) return toolInputError("Provide exactly one of url or file_ref.");
@@ -108,7 +132,20 @@ export function registerTools(server: McpServer, io: Io): void {
         job_id: z.string().min(1),
         wait_ms: z.number().int().min(0).max(25_000).default(0).describe("Long-poll up to this many ms (cap 25000) for the job to finish."),
       },
-      annotations: { readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+      outputSchema: {
+        id: z.string().optional(),
+        job_id: z.string().optional(),
+        status: z.string(),
+        title: z.string().nullable().optional(),
+        source: z.string().nullable().optional(),
+        language: z.string().nullable().optional(),
+        billed_minutes: z.number().nullable().optional(),
+        duration_seconds: z.number().optional(),
+        text: z.string().nullable().optional(),
+        summary: z.string().nullable().optional(),
+        segments: z.array(segmentOutput).optional(),
+      },
+      annotations: { title: "Get transcription result", readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false },
     },
     async ({ job_id, wait_ms }) => {
       try {
@@ -140,7 +177,8 @@ export function registerTools(server: McpServer, io: Io): void {
         filename: z.string().optional().describe("Original filename (used to infer content type when mime_type is omitted)."),
         mime_type: z.string().optional().describe("audio/* or video/* content type. Inferred from the filename/path extension if omitted."),
       },
-      annotations: { readOnlyHint: false, openWorldHint: false, idempotentHint: false, destructiveHint: false },
+      outputSchema: { file_ref: z.string() },
+      annotations: { title: "Upload local media", readOnlyHint: false, openWorldHint: false, idempotentHint: false, destructiveHint: false },
     },
     async (a) => {
       if (!!a.path === !!a.bytes_base64) return toolInputError("Provide exactly one of path or bytes_base64.");
@@ -188,7 +226,11 @@ export function registerTools(server: McpServer, io: Io): void {
         limit: z.number().int().min(1).max(100).default(20),
         status: z.enum(["queued", "processing", "done", "failed", "canceled"]).optional(),
       },
-      annotations: { readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+      outputSchema: {
+        transcriptions: z.array(looseRecord),
+        count: z.number().int().nonnegative(),
+      },
+      annotations: { title: "List recent transcriptions", readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false },
     },
     async ({ limit, status }) => {
       try {
@@ -217,7 +259,12 @@ export function registerTools(server: McpServer, io: Io): void {
         feed_url: z.url(),
         limit: z.number().int().min(1).max(200).default(50),
       },
-      annotations: { readOnlyHint: true, openWorldHint: true, idempotentHint: true, destructiveHint: false },
+      outputSchema: {
+        total: z.number().int().nonnegative(),
+        returned: z.number().int().nonnegative(),
+        data: z.array(looseRecord),
+      },
+      annotations: { title: "List podcast episodes", readOnlyHint: true, openWorldHint: true, idempotentHint: true, destructiveHint: false },
     },
     async ({ feed_url, limit }) => {
       try {
@@ -239,14 +286,21 @@ export function registerTools(server: McpServer, io: Io): void {
     {
       title: "Batch-transcribe a podcast feed",
       description:
-        "Batch-transcribe a whole podcast feed in one call – fan out every episode, or the latest N, to individual jobs. Returns a set of job_ids. Paid capability (throughput/abuse gate).",
+        "Batch-transcribe a whole podcast feed in one call – fan out every episode, or the latest N, to individual jobs. Returns a set of job_ids. Requires an account entitlement.",
       inputSchema: {
         feed_url: z.url(),
         latest: z.number().int().min(1).optional().describe("Transcribe only the newest N episodes; omit for the whole feed."),
         diarize: z.boolean().default(false),
         idempotency_key: z.string().optional().describe("Make retries safe; the same key returns the same batch (no re-billing)."),
       },
-      annotations: { readOnlyHint: false, openWorldHint: true, idempotentHint: true, destructiveHint: false },
+      outputSchema: {
+        batch_id: z.string(),
+        total: z.number().int().nonnegative(),
+        transcriptions: z.array(looseRecord),
+        skipped: z.array(z.unknown()).optional(),
+        idempotent_replay: z.boolean().optional(),
+      },
+      annotations: { title: "Batch-transcribe a podcast feed", readOnlyHint: false, openWorldHint: true, idempotentHint: true, destructiveHint: false },
     },
     async (a) => {
       try {
@@ -271,18 +325,23 @@ export function registerTools(server: McpServer, io: Io): void {
     {
       title: "Export a transcript",
       description:
-        "Export a finished transcript as SRT, VTT, TXT, Markdown, or JSON, with correct caption timings. Segment-level export is free; word-level-timed export (word_level:true) is a paid unlock. (DOCX/PDF are available in the Pepys web app.)",
+        "Export a finished transcript as SRT, VTT, TXT, Markdown, or JSON, with caption timings. Word-level timing (word_level:true) requires an account entitlement; segment-level export remains available without it. (DOCX/PDF are available in the Pepys web app.)",
       inputSchema: {
         job_id: z.string().min(1),
         format: z.enum(["srt", "vtt", "txt", "md", "json"]),
-        word_level: z.boolean().default(false).describe("Word-level timings (paid unlock). Segment-level export is free."),
+        word_level: z.boolean().default(false).describe("Include word-level timings when the account has that entitlement. Otherwise use segment-level timing."),
       },
-      annotations: { readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+      outputSchema: {
+        format: z.enum(["srt", "vtt", "txt", "md", "json"]),
+        word_level: z.boolean(),
+        transcript: z.string(),
+      },
+      annotations: { title: "Export a transcript", readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false },
     },
     async ({ job_id, format, word_level }) => {
       try {
         const body = await io.apiText(`/transcriptions/${enc(job_id)}/export`, { format, word_level: word_level || undefined });
-        return okText(body);
+        return ok({ format, word_level, transcript: body }, body);
       } catch (e) {
         return toToolError(e, { feature: word_level ? "word_level" : undefined });
       }
@@ -304,7 +363,12 @@ export function registerTools(server: McpServer, io: Io): void {
         context_segments: z.number().int().min(0).max(3).default(0).describe("Also return this many neighbor segments around each hit."),
         max_results: z.number().int().min(1).max(100).default(20),
       },
-      annotations: { readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+      outputSchema: {
+        total_matches: z.number().int().nonnegative(),
+        returned: z.number().int().nonnegative(),
+        matches: z.array(segmentOutput),
+      },
+      annotations: { title: "Search within a transcript", readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false },
     },
     async ({ job_id, query, case_sensitive, whole_word, context_segments, max_results }) => {
       try {
@@ -332,6 +396,55 @@ export function registerTools(server: McpServer, io: Io): void {
     },
   );
 
+  // ── ask_transcription (server-verified evidence) ────────────────────────
+  server.registerTool(
+    "ask_transcription",
+    {
+      title: "Ask a transcription with verified evidence",
+      description:
+        "Answer a question using a finished transcript. Returns only independently supported claims with canonical source segment IDs, exact timestamps, excerpts, coverage and withheld-claim counts. Unsupported or invented citations are not presented as answers.",
+      inputSchema: {
+        job_id: z.string().min(1),
+        question: z.string().min(1).max(4_000),
+      },
+      outputSchema: {
+        contractVersion: z.literal(1),
+        status: z.enum(["supported", "partial", "not_found"]),
+        text: z.string(),
+        claims: z.array(
+          z.object({
+            id: z.string(),
+            text: z.string(),
+            citations: z.array(evidenceCitationOutput),
+          }),
+        ),
+        withheld: z.array(
+          z.object({
+            claimId: z.string(),
+            reason: z.enum(["invalid_citation", "unsupported", "irrelevant", "uncertain"]),
+          }),
+        ),
+        coverage: z.object({
+          sourceSegments: z.number().int().nonnegative(),
+          includedSegments: z.number().int().nonnegative(),
+          truncated: z.boolean(),
+        }),
+      },
+      annotations: { title: "Ask a transcription with verified evidence", readOnlyHint: true, idempotentHint: false, destructiveHint: false, openWorldHint: false },
+    },
+    async ({ job_id, question }) => {
+      try {
+        const answer = await io.apiJson<Record<string, unknown>>(
+          `/transcriptions/${enc(job_id)}/ask`,
+          { method: "POST", body: { question } },
+        );
+        return ok(answer, String(answer.text ?? "No supported answer found."));
+      } catch (e) {
+        return toToolError(e);
+      }
+    },
+  );
+
   // ── get_credit_balance ──────────────────────────────────────────────────
   server.registerTool(
     "get_credit_balance",
@@ -340,12 +453,17 @@ export function registerTools(server: McpServer, io: Io): void {
       description:
         "Return the account's remaining transcription credits (in minutes) so you can check headroom before starting a large batch and avoid running out mid-run.",
       inputSchema: {},
-      annotations: { readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+      outputSchema: {
+        balance: z.number(),
+        minutes: z.number(),
+        is_paid: z.boolean(),
+      },
+      annotations: { title: "Check credit balance", readOnlyHint: true, idempotentHint: true, destructiveHint: false, openWorldHint: false },
     },
     async () => {
       try {
         const c = await io.apiJson<{ balance: number; minutes: number; is_paid: boolean }>("/credits");
-        return ok(c, `${c.minutes} minutes of transcription credit remaining${c.is_paid ? " (Pro features unlocked)" : ""}.`);
+        return ok(c, `${c.minutes} minutes of transcription balance remaining.`);
       } catch (e) {
         return toToolError(e);
       }

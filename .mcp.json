@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "pepys": {
+      "type": "http",
+      "url": "https://pepys.co/api/mcp"
+    }
+  }
+}

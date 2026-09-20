@@ -12,7 +12,7 @@ const server = new McpServer(
     instructions:
       "Pepys transcribes audio and video into accurate, speaker-labeled, timestamped transcripts – " +
       "including hours-long files, diarization, correctly-timed SRT/VTT, and paste-a-link ingestion " +
-      "(YouTube, podcasts, Drive/Dropbox) that a general model can't do on a raw file. Start a job with " +
+      "(YouTube, podcasts, Drive/Dropbox). Start a job with " +
       "`transcribe`, then poll `get_transcription` (set wait_ms:25000 for short clips). Never trains on your audio.",
   },
 );

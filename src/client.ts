@@ -1,8 +1,5 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
-const BILLING_URL = "https://pepys.co/billing";
-const KEYS_URL = "https://pepys.co/developers";
-
 /** A non-2xx response from the Pepys API. Carries the parsed body + Retry-After for error mapping. */
 export class PepysApiError extends Error {
   constructor(
@@ -29,7 +26,7 @@ type Query = Record<string, string | number | boolean | undefined>;
  *  - stdio server → a fixed `pk_live_` key from the env (`makeEnvIo`).
  *  - remote OAuth server → the caller's short-lived OAuth access token (the Next app builds it
  *    with `makeApiIo({ base: <origin>/api/v1, token: session.accessToken })`).
- * Both hit the SAME `/api/v1/*` routes, so every gate (rate-limit, 402 balance, 403 paid-feature,
+ * Both hit the SAME `/api/v1/*` routes, so every gate (rate-limit, 402 balance, 403 entitlement,
  * idempotency, 404 IDOR scoping) and the credit debit are reused verbatim – no per-transport code.
  */
 export interface Io {
@@ -137,14 +134,14 @@ function err(text: string, structured: Record<string, unknown>): CallToolResult 
 
 type Feature = "diarization" | "batch" | "word_level";
 const FEATURE_LINE: Record<Feature, string> = {
-  diarization: `Speaker diarization (who-said-what labels) is a Pepys Pro capability this account hasn't unlocked yet. Any one-time purchase enables it – along with batch podcast feeds and word-level export – at ${BILLING_URL}. Or tell me to re-run without diarize and I'll give you a plain transcript now.`,
-  batch: `Batch transcribing a whole podcast feed is a Pepys Pro capability this account hasn't unlocked yet. Any one-time purchase enables it at ${BILLING_URL}. Or point me at a single episode and I'll transcribe just that one now.`,
-  word_level: `Word-level timing export is a Pepys Pro capability this account hasn't unlocked yet. Unlock it with any one-time purchase at ${BILLING_URL}. Segment-level SRT, VTT, TXT, Markdown, and JSON exports are free – want one of those instead?`,
+  diarization: "Speaker diarization (who-said-what labels) isn't included in this account's current entitlement. I can re-run without diarization and return a plain transcript.",
+  batch: "Batch podcast transcription isn't included in this account's current entitlement. I can transcribe one episode at a time instead.",
+  word_level: "Word-level timing export isn't included in this account's current entitlement. I can return a segment-level SRT, VTT, TXT, Markdown, or JSON export instead.",
 };
 
 /**
  * Map any thrown error (a PepysApiError or a network failure) to a graceful `isError` tool result.
- * `opts.feature` names the pro capability the tool attempted, so a 403 gets the right unlock copy;
+ * `opts.feature` names the entitled capability the tool attempted, so a 403 gets the right fallback;
  * `opts.neededMinutes`/`balanceMinutes` enrich the 402 out-of-credits message when known.
  */
 export function toToolError(
@@ -156,22 +153,22 @@ export function toToolError(
     switch (e.status) {
       case 401:
         return err(
-          `Your Pepys API key is missing or invalid. Set PEPYS_API_KEY to a key from ${KEYS_URL} (it starts with pk_live_) and reconnect, then I'll try again.`,
+          "Pepys authentication is missing or invalid. Reconnect the Pepys plugin, then try again.",
           { error: "unauthorized" },
         );
       case 402: {
         const need = opts.neededMinutes != null ? `about ${opts.neededMinutes} min` : "more";
         const have = opts.balanceMinutes != null ? `${opts.balanceMinutes}` : "0";
         return err(
-          `You're out of Pepys transcription credits. This job needs ${need} and the account has ${have} left. Top up at ${BILLING_URL} – it's pay-once and credits never expire – then ask me to retry and I'll resume this job.`,
-          { error: "out_of_credits", top_up_url: BILLING_URL, needed_minutes: opts.neededMinutes, balance_minutes: opts.balanceMinutes },
+          `This Pepys account doesn't have enough transcription balance for the job. It needs ${need} and the account has ${have} minutes left. Manage the account balance outside this conversation, then ask me to retry.`,
+          { error: "insufficient_balance", needed_minutes: opts.neededMinutes, balance_minutes: opts.balanceMinutes },
         );
       }
       case 403: {
         const feature = opts.feature;
         return err(
-          feature ? FEATURE_LINE[feature] : `This is a Pepys Pro capability this account hasn't unlocked yet. Unlock it with any one-time purchase at ${BILLING_URL}.`,
-          { error: "upgrade_required", feature, upgrade: true, upgrade_url: BILLING_URL },
+          feature ? FEATURE_LINE[feature] : "This capability isn't included in the account's current entitlement.",
+          { error: "entitlement_required", feature },
         );
       }
       case 429:
@@ -212,5 +209,12 @@ export interface Transcription {
   word_count?: number | null;
   text?: string | null;
   summary?: string | null;
+  chapters?: Array<{ title: string; start: number }>;
+  enrichment?: {
+    contractVersion: number;
+    summary?: { status: string; error?: string };
+    chapters?: { status: string; error?: string };
+    translation?: { status: string; target: string; error?: string };
+  } | null;
   segments?: Segment[];
 }

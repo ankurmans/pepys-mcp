@@ -1,0 +1,15 @@
+{
+  "name": "pepys",
+  "description": "Transcribe audio, video, and podcasts with Pepys directly from Claude Code.",
+  "owner": {
+    "name": "Pepys",
+    "url": "https://pepys.co"
+  },
+  "plugins": [
+    {
+      "name": "pepys",
+      "description": "Transcribe audio, video, and podcasts with Pepys – diarization, timed SRT/VTT captions, paste-a-link ingestion, and transcript search.",
+      "source": "./"
+    }
+  ]
+}
