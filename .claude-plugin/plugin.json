@@ -1,0 +1,27 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "pepys",
+  "version": "0.1.1",
+  "description": "Transcribe audio, video, and podcasts with Pepys directly from Claude Code – diarization, timed SRT/VTT captions, paste-a-link ingestion, and transcript search.",
+  "author": {
+    "name": "Pepys",
+    "email": "hello@pepys.co",
+    "url": "https://pepys.co"
+  },
+  "homepage": "https://pepys.co/developers",
+  "repository": "https://github.com/ankurmans/pepys-mcp",
+  "license": "MIT",
+  "keywords": [
+    "transcription",
+    "audio",
+    "video",
+    "podcast",
+    "diarization",
+    "captions"
+  ],
+  "skills": [
+    "./skills/pepys"
+  ],
+  "privacyPolicyUrl": "https://pepys.co/privacy",
+  "icon": "./.claude-plugin/icon.png"
+}
