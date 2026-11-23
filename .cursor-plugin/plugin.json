@@ -10,6 +10,6 @@
   "homepage": "https://pepys.co/mcp",
   "repository": "https://github.com/ankurmans/pepys-mcp",
   "license": "MIT",
-  "logo": "./logo.png",
+  "logo": "./pepys-quill-wordmark.png",
   "mcpServers": "./.mcp.json"
 }
