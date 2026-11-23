@@ -1,0 +1,11 @@
+{
+  "name": "pepys-transcribe",
+  "version": "0.1.0",
+  "description": "Transcribe audio, video, and podcasts into searchable, timestamped text.",
+  "repository": "https://github.com/ankurmans/pepys-mcp",
+  "mcpServers": {
+    "pepys": {
+      "httpUrl": "https://pepys.co/api/mcp"
+    }
+  }
+}
