@@ -76,6 +76,10 @@ npm run smoke      # PEPYS_API_KEY=pk_live_… npm run smoke  – hits the live 
 
 Built by **[Pepys](https://pepys.co)**. Learn more at **[pepys.co](https://pepys.co)** · [MCP server](https://pepys.co/mcp) · [Developer docs](https://pepys.co/developers).
 
+## Registry status
+
+[![Pepys Transcribe remote connector on Glama](https://glama.ai/mcp/connectors/co.pepys/pepys-mcp/badges/score.svg)](https://glama.ai/mcp/connectors/co.pepys/pepys-mcp)
+
 ## License
 
 MIT

@@ -1,0 +1,15 @@
+{
+  "name": "pepys-transcribe",
+  "displayName": "Pepys Transcribe",
+  "version": "0.1.0",
+  "description": "Transcribe audio, video, and podcasts into searchable, timestamped text.",
+  "author": {
+    "name": "Pepys",
+    "url": "https://pepys.co"
+  },
+  "homepage": "https://pepys.co/mcp",
+  "repository": "https://github.com/ankurmans/pepys-mcp",
+  "license": "MIT",
+  "logo": "./logo.png",
+  "mcpServers": "./.mcp.json"
+}
